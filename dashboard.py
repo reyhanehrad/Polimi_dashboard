@@ -1,7 +1,7 @@
 """
 ==========================================================================
 GROUP 14 — Software Prototype Dashboard
-Maintenance Risk Predictor + Portfolio Analytics + Monte Carlo Playground
+Maintenance Risk Predictor + Portfolio Analytics + Building Deep Dive
 ==========================================================================
 Run locally:  streamlit run dashboard.py
 Run in Colab: see RUN_DASHBOARD_GUIDE.md
@@ -30,12 +30,18 @@ st.markdown("""
         padding: 20px; border-radius: 10px; margin-bottom: 20px; color: white;
     }
     .metric-card {
-        background: #F8F9FA; padding: 15px; border-radius: 8px;
-        border-left: 4px solid #1F4E79;
+        background: #F8F9FA !important; padding: 15px; border-radius: 8px;
+        border-left: 4px solid #1F4E79; color: #222 !important;
     }
-    .risk-high   { background: #FFEBEE; border-left-color: #C62828; }
-    .risk-medium { background: #FFF8E1; border-left-color: #F57F17; }
-    .risk-low    { background: #E8F5E9; border-left-color: #2E7D32; }
+    .metric-card h4, .metric-card p {
+        color: #222 !important;
+    }
+    .risk-high   { background: #FFEBEE !important; border-left-color: #C62828; color: #222 !important; }
+    .risk-medium { background: #FFF8E1 !important; border-left-color: #F57F17; color: #222 !important; }
+    .risk-low    { background: #E8F5E9 !important; border-left-color: #2E7D32; color: #222 !important; }
+    .risk-high h4, .risk-high p,
+    .risk-medium h4, .risk-medium p,
+    .risk-low h4, .risk-low p { color: #222 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -93,7 +99,7 @@ st.sidebar.markdown("**Group 14** · A.Y. 2024-2025")
 st.sidebar.markdown("---")
 page = st.sidebar.radio(
     "📋 Navigation",
-    ["🎯 Risk Predictor", "📊 Portfolio Analytics", "🏢 Building Deep Dive", "🎲 Monte Carlo Playground"]
+    ["🎯 Risk Predictor", "📊 Portfolio Analytics", "🏢 Building Deep Dive"]
 )
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"""
@@ -394,92 +400,3 @@ elif page == "🏢 Building Deep Dive":
     top_risk['Pred. Delay (h)'] = top_risk['Pred. Delay (h)'].round(0)
     top_risk['RPS'] = top_risk['RPS'].round(0)
     st.dataframe(top_risk, use_container_width=True)
-
-# ==========================================================================
-# PAGE 4 — MONTE CARLO PLAYGROUND
-# ==========================================================================
-elif page == "🎲 Monte Carlo Playground":
-    st.markdown("""<div class="main-header">
-        <h1 style="margin:0;">🎲 Monte Carlo Scenario Playground</h1>
-        <p style="margin:5px 0 0 0;">Simulate managerial strategies and see their impact</p>
-    </div>""", unsafe_allow_html=True)
-
-    st.markdown("Adjust the sliders to test custom managerial strategies. The simulation runs **300 simulations** of **1,000 tickets** each.")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("🛠️ Proactive Intervention")
-        target_fraction = st.slider("Top % of tickets to target (by RPS)", 0, 50, 20, step=5)
-        delay_reduction = st.slider("Delay reduction on targeted tickets (%)", 0, 80, 50, step=10)
-    with col2:
-        st.subheader("📋 SLA Redesign")
-        sla_multiplier = st.slider("SLA multiplier (extend all SLAs)", 1.0, 3.0, 1.5, step=0.25)
-
-    if st.button("▶️ Run Simulation", type="primary"):
-        progress = st.progress(0)
-        status = st.empty()
-        n_sim, n_tickets = 300, 1000
-        breach_rates, avg_delays = [], []
-        for i in range(n_sim):
-            idx = np.random.choice(len(df), size=n_tickets, replace=True)
-            sample = df.iloc[idx].copy().reset_index(drop=True)
-            true_delay = sample['delay_hours'].values.copy()
-            old_sla = sample['SLA_hours'].values
-            rps = sample['RPS'].values
-            if target_fraction > 0 and delay_reduction > 0:
-                threshold = np.quantile(rps, 1 - target_fraction/100)
-                targeted = rps >= threshold
-                true_delay = np.where(targeted, true_delay * (1 - delay_reduction/100), true_delay)
-            sla_extension = (sla_multiplier - 1.0) * old_sla
-            adjusted_delay = true_delay - sla_extension
-            breach_rates.append((adjusted_delay > 0).mean() * 100)
-            avg_delays.append(np.clip(adjusted_delay, 0, None).mean())
-            if i % 30 == 0:
-                progress.progress(i / n_sim)
-                status.text(f"Running simulation {i}/{n_sim}...")
-        progress.progress(1.0)
-        status.text("✅ Simulation complete!")
-
-        st.markdown("---")
-        st.subheader("📊 Simulation Results")
-        baseline_breach, baseline_delays = [], []
-        for _ in range(n_sim):
-            idx = np.random.choice(len(df), size=n_tickets, replace=True)
-            sample = df.iloc[idx]
-            baseline_breach.append((sample['delay_hours'] > 0).mean() * 100)
-            baseline_delays.append(sample['delay_hours'].clip(lower=0).mean())
-
-        col_r1, col_r2 = st.columns(2)
-        col_r1.metric("🚨 SLA Breach Rate", f"{np.mean(breach_rates):.1f}%",
-                      f"{(np.mean(breach_rates) - np.mean(baseline_breach)):+.1f}pp vs baseline")
-        col_r1.caption(f"90% CI: [{np.percentile(breach_rates, 5):.1f}% – {np.percentile(breach_rates, 95):.1f}%]")
-        col_r2.metric("⏱️ Average Delay", f"{np.mean(avg_delays):.0f}h",
-                      f"{(np.mean(avg_delays) - np.mean(baseline_delays)):+.0f}h vs baseline")
-        col_r2.caption(f"90% CI: [{np.percentile(avg_delays, 5):.0f}h – {np.percentile(avg_delays, 95):.0f}h]")
-
-        fig = go.Figure()
-        fig.add_trace(go.Histogram(x=breach_rates, name='Your scenario', marker_color='#1F4E79', opacity=0.75))
-        fig.add_trace(go.Histogram(x=baseline_breach, name='Baseline (no action)', marker_color='#9E9E9E', opacity=0.75))
-        fig.update_layout(title='Distribution of Breach Rate across simulations',
-                          xaxis_title='Breach Rate (%)', yaxis_title='Simulations',
-                          barmode='overlay', height=400)
-        st.plotly_chart(fig, use_container_width=True)
-
-        breach_improvement = np.mean(baseline_breach) - np.mean(breach_rates)
-        delay_improvement  = np.mean(baseline_delays) - np.mean(avg_delays)
-        delay_pct = delay_improvement / np.mean(baseline_delays) * 100
-
-        st.markdown("---")
-        st.subheader("💡 Interpretation")
-        st.markdown(f"""
-        Your selected strategy (**top {target_fraction}% targeted, -{delay_reduction}% delay, ×{sla_multiplier} SLA**) yields:
-        - 📉 **Breach rate change**: {-breach_improvement:+.1f} pp ({'improvement' if breach_improvement > 0 else 'worsening'})
-        - 📉 **Average delay change**: {-delay_improvement:+.0f}h ({delay_pct:.0f}% reduction)
-
-        Compare with the **scenarios from our Technical Report**:
-        - Proactive 20% (-50%): -30% delay, 0pp breach
-        - SLA ×1.5: 0% delay, -3.5pp breach
-        - **Combined (top 20%, -50%, ×1.5)**: -31% delay, -3.6pp breach ← optimal
-        """)
-    else:
-        st.info("👈 Set your scenario parameters above and click **Run Simulation** to see results.")
